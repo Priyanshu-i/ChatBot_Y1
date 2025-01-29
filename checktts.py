@@ -4,7 +4,7 @@ import time
 import webbrowser
 import urllib.parse
 import urllib.request
-from threading import Thread
+from threading import Thread, Event
 from typing import Generator, List
 
 
@@ -14,6 +14,7 @@ class ChatBot:
         self.api_url: str = "http://127.0.0.1:11434"
         self.ai_message = ""
         self.engine = pyttsx3.init()
+        self.response_ready = Event()  # Event to signal when the response is ready
         self.refresh_models()
 
     def fetch_chat_stream_result(self, message: str) -> Generator[str, None, None]:
@@ -57,6 +58,8 @@ class ChatBot:
         """
         try:
             self.ai_message = ""
+            self.response_ready.clear()  # Reset the event
+
             for response_chunk in self.fetch_chat_stream_result(message):  # Pass user message
                 print(response_chunk, end="", flush=True)  # Print the response chunk
                 self.ai_message += response_chunk
@@ -67,20 +70,36 @@ class ChatBot:
             self.chat_history.append({"role": "assistant", "content": self.ai_message})
             print("\nAI Response generation complete.")
 
+            # Signal that the response is ready
+            self.response_ready.set()
+
             # Speak the response
             self.speak()
         except Exception as e:
             print(f"Error while generating AI response: {e}")
             self.ai_message = "An error occurred while generating the response."
+            self.response_ready.set()  # Signal even if there's an error
 
     def speak(self):
         """
         Use pyttsx3 to speak the AI message.
         """
         try:
+            self.response_ready.wait()  # Wait until the response is ready
+
+            # Stop the engine if it's already running
+            if self.engine._inLoop:
+                self.engine.endLoop()
+
+            # Reinitialize the engine
+            self.engine = pyttsx3.init()
+
+            # Configure the engine
             self.engine.setProperty("rate", 150)  # Set speaking rate
             voices = self.engine.getProperty("voices")
             self.engine.setProperty("voice", voices[1].id if len(voices) > 1 else voices[0].id)  # Use a female voice if available
+
+            # Speak the message
             self.engine.say(self.ai_message)
             self.engine.runAndWait()
         except Exception as e:
@@ -155,3 +174,6 @@ if __name__ == "__main__":
         print("\nProcess interrupted by user.")
     except Exception as e:
         print(f"Unexpected error in main logic: {e}")
+
+    # Add this line to keep the window open
+    input("\nPress Enter to exit")
