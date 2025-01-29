@@ -6,7 +6,7 @@ import urllib.parse
 import urllib.request
 from threading import Thread, Event
 from typing import Generator, List
-
+    
 
 class ChatBot:
     def __init__(self):
@@ -70,11 +70,14 @@ class ChatBot:
             self.chat_history.append({"role": "assistant", "content": self.ai_message})
             print("\nAI Response generation complete.")
 
-            # Signal that the response is ready
-            self.response_ready.set()
+            if ask == 'Y' or ask == 'y':
+                # Signal that the response is ready
+                self.response_ready.set()
 
-            # Speak the response
-            self.speak()
+                # Speak the response
+                self.speak()
+
+
         except Exception as e:
             print(f"Error while generating AI response: {e}")
             self.ai_message = "An error occurred while generating the response."
@@ -132,9 +135,30 @@ class ChatBot:
         self.update_host()
         Thread(target=self.update_model_select, daemon=True).start()
 
+    def stop(self):
+        if ask == 'Y' or ask == 'y':
+            self.engine.stop()
+
+
+def greeting():
+    engine = pyttsx3.init()
+    engine.setProperty("rate", 150)
+    voices = engine.getProperty("voices")
+    engine.setProperty("voice", voices[1].id if len(voices) > 1 else voices[0].id)
+    greet = "Hello Sir, How can i help you Today!"
+    engine.say(greet)
+    engine.runAndWait()
+
 
 # Main logic
 if __name__ == "__main__":
+
+    
+    ask = input("Speaking allowed (Y/N) : ")
+    if ask == 'Y' or ask == 'y':
+        time.sleep(1)
+        greeting()
+
     chatbot = ChatBot()
 
     try:
@@ -149,12 +173,21 @@ if __name__ == "__main__":
             # Check for termination condition
             if message == "/bye":
                 print("Goodbye! Ending the conversation.")
+                chatbot.stop()
                 break
+
+            if message == "/stop":
+                chatbot.stop()
+                ask = input("Speaking allowed (Y/N) : ")
+
+            if message == "/":
+                print("\n/bye : for ending the conversation.")
+                print("/stop : To stop voice, Change mode.\n")
 
             # Validate user input
             if not message:
                 print("Prompt cannot be empty. Please enter a valid input.")
-            else:
+            elif message[0] != '/':
                 # Append user message to chat history
                 chatbot.chat_history.append({"role": "user", "content": message})
 
@@ -169,6 +202,8 @@ if __name__ == "__main__":
                 print("\nGenerating AI response... Please wait.")
 
                 # Do not wait for the thread to finish, continue to prompt for new input
+
+        
 
     except KeyboardInterrupt:
         print("\nProcess interrupted by user.")
