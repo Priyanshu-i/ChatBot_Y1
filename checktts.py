@@ -1,6 +1,8 @@
 import pyttsx3
 import json
 import time
+import sys
+import msvcrt
 import webbrowser
 import urllib.parse
 import urllib.request
@@ -68,7 +70,7 @@ class ChatBot:
                 self.ai_message = "I couldn't generate a meaningful response. Please try asking differently."
 
             self.chat_history.append({"role": "assistant", "content": self.ai_message})
-            print("\nAI Response generation complete.")
+            print("\nAI Response generation complete.\n")
 
             if ask == 'Y' or ask == 'y':
                 # Signal that the response is ready
@@ -139,6 +141,59 @@ class ChatBot:
         if ask == 'Y' or ask == 'y':
             self.engine.stop()
 
+    def get_multiline_input_with_quotes(prompt: str = "Enter Prompt (use ''' or \"\"\" for multiline input): ", placeholder="\nPaste or type here..."):
+        """
+        Get multiline input from the user using triple quotes (''' or \"\"\") as delimiters.
+        Supports pasting multi-line input and removes the placeholder upon typing.
+        """
+        
+        sys.stdout.flush()
+        sys.stdout.write(f"\033[90m{placeholder}\033[0m\n")  # Light gray placeholder
+        sys.stdout.flush()
+        lines = []
+        first_line = ""
+
+        # Read first line
+        while True:
+            key = msvcrt.getch().decode("utf-8")
+            if key == "\r":  # Enter key
+                print()
+                break
+            elif key == "\b":  # Backspace key
+                if first_line:
+                    first_line = first_line[:-1]
+                    sys.stdout.write("\b \b")  # Remove last character
+                    sys.stdout.flush()
+            else:
+                if not first_line:
+                    # Clear placeholder on first key press
+                    sys.stdout.write("\r" + " " * len(placeholder) + "\r")
+                    sys.stdout.flush()
+                sys.stdout.write(key)
+                sys.stdout.flush()
+                first_line += key
+
+        first_line = first_line.strip()
+
+        # Check if the input starts with triple quotes
+        if first_line.startswith("'''") or first_line.startswith('"""'):
+            delimiter = first_line[:3]  # Get the delimiter (''' or """)
+            lines.append(first_line[3:])  # Remove the starting delimiter
+
+            # Read multiline input
+            while True:
+                try:
+                    line = input()
+                    if line.strip().endswith(delimiter):  # Check for ending delimiter
+                        lines.append(line[:-3])  # Remove the ending delimiter
+                        break
+                    lines.append(line)
+                except KeyboardInterrupt:  # Handle Ctrl+C
+                    break
+            return "\n".join(lines)  # Combine lines into a single string
+        else:
+            return first_line  # Single-line input
+
 
 def greeting():
     engine = pyttsx3.init()
@@ -168,7 +223,7 @@ if __name__ == "__main__":
         # Start the conversation loop
         while message != "/bye":
             # Get user input
-            message = input("\nEnter Prompt: ").strip()
+            message = chatbot.get_multiline_input_with_quotes().strip()
 
             # Check for termination condition
             if message == "/bye":
@@ -182,7 +237,8 @@ if __name__ == "__main__":
 
             if message == "/":
                 print("\n/bye : for ending the conversation.")
-                print("/stop : To stop voice, Change mode.\n")
+                print("/stop : To stop voice, Change mode.")
+                print("''' or \"\"\" for multiline input\n")
 
             # Validate user input
             if not message:
