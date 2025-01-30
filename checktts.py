@@ -8,7 +8,7 @@ import urllib.parse
 import urllib.request
 from threading import Thread, Event
 from typing import Generator, List
-    
+
 
 class ChatBot:
     def __init__(self):
@@ -17,6 +17,8 @@ class ChatBot:
         self.ai_message = ""
         self.engine = pyttsx3.init()
         self.response_ready = Event()  # Event to signal when the response is ready
+        self.is_generating_response = False  # Flag to track if a response is being generated
+        self.current_response_thread = None  # Track the current response thread
         self.refresh_models()
 
     def fetch_chat_stream_result(self, message: str) -> Generator[str, None, None]:
@@ -59,6 +61,7 @@ class ChatBot:
         Generate the AI response in a separate thread and append it to chat history.
         """
         try:
+            self.is_generating_response = True  # Set the flag to indicate response generation is in progress
             self.ai_message = ""
             self.response_ready.clear()  # Reset the event
 
@@ -79,11 +82,12 @@ class ChatBot:
                 # Speak the response
                 self.speak()
 
-
         except Exception as e:
             print(f"Error while generating AI response: {e}")
             self.ai_message = "An error occurred while generating the response."
             self.response_ready.set()  # Signal even if there's an error
+        finally:
+            self.is_generating_response = False  # Reset the flag after response generation is complete
 
     def speak(self):
         """
@@ -141,12 +145,12 @@ class ChatBot:
         if ask == 'Y' or ask == 'y':
             self.engine.stop()
 
+    @staticmethod
     def get_multiline_input_with_quotes(prompt: str = "Enter Prompt (use ''' or \"\"\" for multiline input): ", placeholder="\nPaste or type here..."):
         """
         Get multiline input from the user using triple quotes (''' or \"\"\") as delimiters.
         Supports pasting multi-line input and removes the placeholder upon typing.
         """
-        
         sys.stdout.flush()
         sys.stdout.write(f"\033[90m{placeholder}\033[0m\n")  # Light gray placeholder
         sys.stdout.flush()
@@ -155,7 +159,7 @@ class ChatBot:
 
         # Read first line
         while True:
-            key = msvcrt.getch().decode("utf-8")
+            key = msvcrt.getch().decode("utf-8", errors="ignore")  # Ignore invalid UTF-8 characters
             if key == "\r":  # Enter key
                 print()
                 break
@@ -164,6 +168,8 @@ class ChatBot:
                     first_line = first_line[:-1]
                     sys.stdout.write("\b \b")  # Remove last character
                     sys.stdout.flush()
+            elif key in ("\x00", "\xe0"):  # Ignore special keys (arrows, etc.)
+                msvcrt.getch()  # Skip the next character (part of the special key sequence)
             else:
                 if not first_line:
                     # Clear placeholder on first key press
@@ -207,8 +213,6 @@ def greeting():
 
 # Main logic
 if __name__ == "__main__":
-
-    
     ask = input("Speaking allowed (Y/N) : ")
     if ask == 'Y' or ask == 'y':
         time.sleep(1)
@@ -247,19 +251,19 @@ if __name__ == "__main__":
                 # Append user message to chat history
                 chatbot.chat_history.append({"role": "user", "content": message})
 
+                # If a response is already being generated, stop it
+                if chatbot.is_generating_response and chatbot.current_response_thread:
+                    chatbot.current_response_thread.join(timeout=0.1)  # Wait for the thread to finish
+
                 # Start AI response generation in a thread
-                response_thread = Thread(
+                chatbot.current_response_thread = Thread(
                     target=chatbot.generate_ai_response,
                     args=(message,),  # Pass user message
                     daemon=True,
                 )
-                response_thread.start()
+                chatbot.current_response_thread.start()
 
                 print("\nGenerating AI response... Please wait.")
-
-                # Do not wait for the thread to finish, continue to prompt for new input
-
-        
 
     except KeyboardInterrupt:
         print("\nProcess interrupted by user.")
