@@ -19,6 +19,7 @@ class ChatBot:
         self.response_ready = Event()  # Event to signal when the response is ready
         self.is_generating_response = False  # Flag to track if a response is being generated
         self.current_response_thread = None  # Track the current response thread
+        self.stop_response_flag = False  # Flag to stop the response generation
         self.refresh_models()
 
     def fetch_chat_stream_result(self, message: str) -> Generator[str, None, None]:
@@ -42,6 +43,8 @@ class ChatBot:
 
             with urllib.request.urlopen(request) as resp:
                 for line in resp:
+                    if self.stop_response_flag:  # Check if the response should be stopped
+                        break
                     data = json.loads(line.decode("utf-8"))
                     if "message" in data:
                         time.sleep(0.01)
@@ -64,8 +67,12 @@ class ChatBot:
             self.is_generating_response = True  # Set the flag to indicate response generation is in progress
             self.ai_message = ""
             self.response_ready.clear()  # Reset the event
+            self.stop_response_flag = False  # Reset the stop flag
 
             for response_chunk in self.fetch_chat_stream_result(message):  # Pass user message
+                if self.stop_response_flag:  # Stop generating response if flag is set
+                    print("\nAI response stopped by user.")
+                    break
                 print(response_chunk, end="", flush=True)  # Print the response chunk
                 self.ai_message += response_chunk
 
@@ -146,7 +153,7 @@ class ChatBot:
             self.engine.stop()
 
     @staticmethod
-    def get_multiline_input_with_quotes(prompt: str = "Enter Prompt (use ''' or \"\"\" for multiline input): ", placeholder="\nPaste or type here..."):
+    def get_multiline_input_with_quotes(prompt: str = "Enter Prompt (use ''' or \"\"\" for multiline input): ", placeholder="\n('/' for help) Paste or type here..."):
         """
         Get multiline input from the user using triple quotes (''' or \"\"\") as delimiters.
         Supports pasting multi-line input and removes the placeholder upon typing.
@@ -242,6 +249,7 @@ if __name__ == "__main__":
             if message == "/":
                 print("\n/bye : for ending the conversation.")
                 print("/stop : To stop voice, Change mode.")
+                print("kk : Type 'kk' and press Enter to stop the AI response.")
                 print("''' or \"\"\" for multiline input\n")
 
             # Validate user input
@@ -253,9 +261,11 @@ if __name__ == "__main__":
 
                 # If a response is already being generated, stop it
                 if chatbot.is_generating_response and chatbot.current_response_thread:
+                    chatbot.stop_response_flag = True  # Set the stop flag
                     chatbot.current_response_thread.join(timeout=0.1)  # Wait for the thread to finish
 
                 # Start AI response generation in a thread
+                chatbot.stop_response_flag = False  # Reset the stop flag
                 chatbot.current_response_thread = Thread(
                     target=chatbot.generate_ai_response,
                     args=(message,),  # Pass user message
@@ -264,6 +274,18 @@ if __name__ == "__main__":
                 chatbot.current_response_thread.start()
 
                 print("\nGenerating AI response... Please wait.")
+
+                # Monitor for 'kk' to stop the response
+                
+                while chatbot.is_generating_response:
+                    if msvcrt.kbhit():  # Check if a key is pressed
+                        key = msvcrt.getch().decode("utf-8", errors="ignore")
+                        if key == 'k':
+                            second_key = msvcrt.getch().decode("utf-8", errors="ignore")
+                            if second_key == 'k':
+                                chatbot.stop_response_flag = True  # Set the stop flag
+                                print("\nStopping AI response...")
+                                break
 
     except KeyboardInterrupt:
         print("\nProcess interrupted by user.")
